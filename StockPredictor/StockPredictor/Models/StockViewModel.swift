@@ -12,6 +12,13 @@ class StockViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
+    // Model update properties
+    @Published var updateDate = Date()
+    @Published var updatePrice = ""
+    @Published var isUpdating = false
+    @Published var updateSuccess = false
+    @Published var showingUpdateForm = false
+    
     // Services
     private let stockService: StockServiceProtocol
     
@@ -37,6 +44,58 @@ class StockViewModel: ObservableObject {
                 await handleError(error)
             } catch {
                 await handleError(.serverError("An unexpected error occurred: \(error.localizedDescription)"))
+            }
+        }
+    }
+    
+    func submitModelUpdate() {
+        guard let stockPrediction = stockPrediction else {
+            errorMessage = "No prediction data to update"
+            return
+        }
+        
+        guard let price = Double(updatePrice), price > 0 else {
+            errorMessage = "Please enter a valid positive price"
+            return
+        }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateString = dateFormatter.string(from: updateDate)
+        
+        isUpdating = true
+        errorMessage = nil
+        updateSuccess = false
+        
+        Task {
+            do {
+                let success = try await stockService.submitModelUpdate(
+                    ticker: stockPrediction.ticker,
+                    date: dateString,
+                    actualPrice: price
+                )
+                
+                await MainActor.run {
+                    self.isUpdating = false
+                    self.updateSuccess = success
+                    if success {
+                        self.updatePrice = ""
+                        // Refresh the prediction after successful update
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            self.fetchStockPrediction()
+                        }
+                    }
+                }
+            } catch let error as NetworkError {
+                await handleError(error)
+                await MainActor.run {
+                    self.isUpdating = false
+                }
+            } catch {
+                await handleError(.serverError("An unexpected error occurred: \(error.localizedDescription)"))
+                await MainActor.run {
+                    self.isUpdating = false
+                }
             }
         }
     }

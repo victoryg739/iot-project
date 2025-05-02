@@ -1,5 +1,5 @@
 // ContentView.swift
-// Main view for the app
+// Main view for the app with model update component added
 
 import SwiftUI
 
@@ -72,6 +72,9 @@ struct ContentView: View {
                     // Results Section
                     if let prediction = viewModel.stockPrediction {
                         StockSummaryView(prediction: prediction)
+                        
+                        // Model Update View - ADD THIS
+                        ModelUpdateView(viewModel: viewModel)
                         
                         // Chart image
                         if let plotData = prediction.dataPlot,

@@ -6,6 +6,7 @@ import Foundation
 // Protocol for dependency injection and testing
 protocol StockServiceProtocol {
     func getPrediction(for ticker: String, forceRetrain: Bool) async throws -> StockPrediction
+    func submitModelUpdate(ticker: String, date: String, actualPrice: Double) async throws -> Bool
 }
 
 // Service implementation for fetching stock predictions
@@ -85,5 +86,49 @@ class StockService: StockServiceProtocol {
             
             throw NetworkError.invalidData
         }
+    }
+    
+    func submitModelUpdate(ticker: String, date: String, actualPrice: Double) async throws -> Bool {
+        guard let url = URL(string: "\(baseURL)/update_model") else {
+            throw NetworkError.invalidURL
+        }
+        
+        #if DEBUG
+        print("Submitting model update to: \(url.absoluteString)")
+        print("Ticker: \(ticker), Date: \(date), Price: \(actualPrice)")
+        #endif
+        
+        // Create request body
+        let body: [String: Any] = [
+            "ticker": ticker,
+            "date": date,
+            "actual_price": actualPrice
+        ]
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        // Perform the request
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        // Check response status
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NetworkError.invalidResponse
+        }
+        
+        // Handle server errors
+        if httpResponse.statusCode >= 400 {
+            // Try to parse error message
+            if let errorObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errorMessage = errorObject["error"] as? String {
+                throw NetworkError.serverError(errorMessage)
+            } else {
+                throw NetworkError.serverError("Server returned status code \(httpResponse.statusCode)")
+            }
+        }
+        
+        return true
     }
 }
